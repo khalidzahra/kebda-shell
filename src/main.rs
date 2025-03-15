@@ -1,4 +1,4 @@
-use std::{io::{stdin, stdout, Write}, process::exit, fs};
+use std::{env, fs, io::{stdin, stdout, Write}, path::{Path, PathBuf}, process::exit};
 
 const PROMPT: &str = "kebda $ ";
 
@@ -47,7 +47,11 @@ fn ls(path: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn handle_command(command: &str) {
+fn pwd(current_dir: &PathBuf) {
+    println!("{}", current_dir.display());
+}
+
+fn handle_command(command: &str, current_dir: &PathBuf) {
     let mut parts = command.split_whitespace();
     let cmd = parts.next().unwrap_or("");
     let args: Vec<&str> = parts.collect();
@@ -59,11 +63,16 @@ fn handle_command(command: &str) {
             let path = args.get(0).unwrap_or(&".");
             ls(path).unwrap();
         },
+        "pwd" => {
+            pwd(current_dir);
+        },
         _ => println!("Unknown command: {}", cmd),
     }
 }
 
 fn main() {    
+    let mut current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
+
     loop {
         print!("{}", PROMPT);
         stdout().flush().unwrap(); // idc
@@ -71,6 +80,6 @@ fn main() {
         let _ = stdin().read_line(&mut user_input);
 
         let command = user_input.trim();
-        handle_command(command);
+        handle_command(command, &current_dir);
     }
 }
