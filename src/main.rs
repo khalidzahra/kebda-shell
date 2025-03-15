@@ -77,6 +77,13 @@ fn cd(path: &str, current_dir: &mut PathBuf) {
     }
 }
 
+fn echo(args: Vec<&str>) {
+    for arg in args {
+        print!("{} ", arg);
+    }
+    println!("\n");
+}
+
 fn handle_command(command: &str, current_dir: &mut PathBuf) {
     let mut parts = command.split_whitespace();
     let cmd = parts.next().unwrap_or("");
@@ -95,6 +102,9 @@ fn handle_command(command: &str, current_dir: &mut PathBuf) {
         "cd" => {
             let path = args.get(0).unwrap_or(&".");
             cd(path, current_dir);
+        },
+        "echo" => {
+            echo(args);
         },
         _ => println!("Unknown command: {}", cmd),
     }
