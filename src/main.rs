@@ -1,4 +1,4 @@
-use std::{env, fs, io::{stdin, stdout, Write}, path::{Path, PathBuf}, process::exit};
+use std::{env, fs, io::{stdin, stdout, Write}, path::PathBuf, process::exit};
 
 const PROMPT: &str = "kebda $ ";
 
@@ -16,21 +16,37 @@ fn help() {
     println!("Available commands: {}", COMMAND_LIST.join(", "));
 }
  
-fn resolve_path(path: &str) -> String {
+fn resolve_path(path: &str, current_dir: &PathBuf) -> String {
+    let mut resolved_path = PathBuf::new();
+    
     // tilde support
-    if path.contains("~") {
-        let home = match home::home_dir() {
-            Some(path) => path.display().to_string(),
-            _ => String::from("/"),
-        };
-        path.replace("~", &home)
+    if path.starts_with("~") {
+        if let Some(home_dir) = home::home_dir() {
+            resolved_path.push(home_dir);
+            if path.len() > 1 { // means we have ~/something
+                resolved_path.push(&path[2..]);
+            }
+        } else { // cant find home dir for some reason so i go root
+            resolved_path.push("/");
+            resolved_path.push(if path.len() > 1 { &path[2..] } else { "" });
+        }
+    } else if path.starts_with("/") { // absolute path
+        resolved_path.push(path);
+    } else { // relative path
+        resolved_path = current_dir.clone();
+        resolved_path.push(path);
+    }
+    
+    // parse . and ..
+    if let Ok(canonical) = fs::canonicalize(&resolved_path) {
+        canonical.display().to_string()
     } else {
-        path.to_string()
+        resolved_path.display().to_string()
     }
 }
 
-fn ls(path: &str) -> std::io::Result<()> {
-    let resolved_path = resolve_path(path);    
+fn ls(path: &str, current_dir: &PathBuf) -> std::io::Result<()> {
+    let resolved_path = resolve_path(path, current_dir);    
 
     let entries = fs::read_dir(&resolved_path)?;
     for entry in entries {
@@ -51,7 +67,17 @@ fn pwd(current_dir: &PathBuf) {
     println!("{}", current_dir.display());
 }
 
-fn handle_command(command: &str, current_dir: &PathBuf) {
+fn cd(path: &str, current_dir: &mut PathBuf) {
+    let resolved_path = resolve_path(path, current_dir);
+    let new_path = PathBuf::from(resolved_path);
+    if new_path.is_dir() {
+        *current_dir = new_path;
+    } else {
+        println!("{} is not a directory", new_path.display());
+    }
+}
+
+fn handle_command(command: &str, current_dir: &mut PathBuf) {
     let mut parts = command.split_whitespace();
     let cmd = parts.next().unwrap_or("");
     let args: Vec<&str> = parts.collect();
@@ -61,10 +87,14 @@ fn handle_command(command: &str, current_dir: &PathBuf) {
         "help" => help(),
         "ls" => {
             let path = args.get(0).unwrap_or(&".");
-            ls(path).unwrap();
+            ls(path, current_dir).unwrap();
         },
         "pwd" => {
             pwd(current_dir);
+        },
+        "cd" => {
+            let path = args.get(0).unwrap_or(&".");
+            cd(path, current_dir);
         },
         _ => println!("Unknown command: {}", cmd),
     }
@@ -80,6 +110,6 @@ fn main() {
         let _ = stdin().read_line(&mut user_input);
 
         let command = user_input.trim();
-        handle_command(command, &current_dir);
+        handle_command(command, &mut current_dir);
     }
 }
