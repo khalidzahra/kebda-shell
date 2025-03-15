@@ -1,4 +1,6 @@
 use std::{env, fs, io::{stdin, stdout, Write}, os::unix::fs::PermissionsExt, path::PathBuf, process::{exit, Command, Stdio}};
+use image::GenericImageView;
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 const PROMPT: &str = "kebda $ ";
 
@@ -225,8 +227,55 @@ fn handle_command(command: &str, current_dir: &mut PathBuf) {
     run_pipeline(commands, current_dir);
 }
 
+fn display_welcome_message() {
+    let img_path = "afroto.jpeg";
+    let img = match image::open(img_path) {
+        Ok(img) => img,
+        Err(e) => {
+            println!("Failed to load welcome image: {}", e);
+            return;
+        }
+    };
+    
+    let width = 80;
+    let height = (img.height() as f32 * width as f32 / img.width() as f32) as u32 / 2;
+    let img = img.resize_exact(width, height, image::imageops::FilterType::Nearest);
+    
+    let gray_img = img.grayscale();
+    
+    let pallet = [' ', '.', ':', '!', '-', '=', '+', '*', '#', '%', '$', '&', '@'];
+    
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    
+    println!("\n=== Welcome to Kebda Shell ===\n");
+    
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = gray_img.get_pixel(x, y);
+            let idx = ((pixel[0] as f32 / 255.0) * (pallet.len() - 1) as f32) as usize;
+            let ch = pallet[idx];
+            
+            if x < img.width() && y < img.height() {
+                let colored_pixel = img.get_pixel(x, y);
+                let _ = stdout.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(
+                    colored_pixel[0],
+                    colored_pixel[1],
+                    colored_pixel[2]
+                ))));
+            }
+            print!("{}", ch);
+        }
+        println!();
+    }
+    
+    let _ = stdout.reset();
+    println!("\n");
+}
+
 fn main() {    
     let mut current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
+    
+    display_welcome_message();
 
     loop {
         print!("{}", PROMPT);
