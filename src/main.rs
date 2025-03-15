@@ -15,10 +15,10 @@ const COMMAND_LIST: &[&str] = &[
 fn help() {
     println!("Available commands: {}", COMMAND_LIST.join(", "));
 }
-
-fn ls(path: &str) -> std::io::Result<()> {
+ 
+fn resolve_path(path: &str) -> String {
     // tilde support
-    let new_path = if path.contains("~") {
+    if path.contains("~") {
         let home = match home::home_dir() {
             Some(path) => path.display().to_string(),
             _ => String::from("/"),
@@ -26,16 +26,20 @@ fn ls(path: &str) -> std::io::Result<()> {
         path.replace("~", &home)
     } else {
         path.to_string()
-    };
+    }
+}
 
-    let entries = fs::read_dir(&new_path)?;
+fn ls(path: &str) -> std::io::Result<()> {
+    let resolved_path = resolve_path(path);    
+
+    let entries = fs::read_dir(&resolved_path)?;
     for entry in entries {
         let entry = entry?;
         let path_buf = entry.path();
 
         // take out prefixes
         let display_path = path_buf.display().to_string();
-        let display_path = display_path.trim_start_matches(&new_path).trim_start_matches("/");
+        let display_path = display_path.trim_start_matches(&resolved_path).trim_start_matches("/");
 
         print!("{} ", display_path);
     }
@@ -59,7 +63,7 @@ fn handle_command(command: &str) {
     }
 }
 
-fn main() {
+fn main() {    
     loop {
         print!("{}", PROMPT);
         stdout().flush().unwrap(); // idc
