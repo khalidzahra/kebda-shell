@@ -1,6 +1,9 @@
-use std::{env, fs, io::{stdin, stdout, Write}, os::unix::fs::PermissionsExt, path::PathBuf, process::{exit, Command, Stdio}};
+use std::{env, fs, io::{stdin, stdout, Write}, os::unix::fs::PermissionsExt, path::PathBuf, process::{exit, Command, Stdio}, time::Duration};
 use image::GenericImageView;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use rodio::{Decoder, OutputStream, Sink, Source};
+use std::io::BufReader;
+use std::fs::File;
 
 const PROMPT: &str = "kebda $ ";
 
@@ -11,6 +14,7 @@ const COMMAND_LIST: &[&str] = &[
     "cd",
     "pwd",
     "echo",
+    "kebda",
 ];
 
 fn help() {
@@ -116,6 +120,36 @@ fn parse_command(command: &str) -> (String, Vec<String>) {
     (cmd, args)
 }
 
+fn kebda(skip: u64, duration: u64) {
+    let kebda_path = "kebda.mp3";
+
+    let (_stream, stream_handle) = match OutputStream::try_default() {
+        Ok(result) => result,
+        Err(_) => {
+            println!("There was an error trying to open the output stream for kebda :(");
+            return;
+        },
+    };
+
+    let file = match File::open(kebda_path) {
+        Ok(result) => result,
+        Err(_) => {
+            println!("There was an error trying to open the kebda mp3 :(");
+            return;
+        },
+    };
+
+    let reader = BufReader::new(file);
+    let decoder = Decoder::new(reader).unwrap();
+    let source = decoder.skip_duration(Duration::from_secs(skip))
+                                                                .take_duration(Duration::from_secs(duration))
+                                                                .amplify(10.0);
+    let sink = Sink::try_new(&stream_handle).unwrap();
+    sink.append(source);
+
+    sink.sleep_until_end();
+}
+
 fn run_builtin(cmd: &str, args: &[String], current_dir: &mut PathBuf) -> Result<(), String> {
     match cmd {
         "exit" => {
@@ -142,6 +176,10 @@ fn run_builtin(cmd: &str, args: &[String], current_dir: &mut PathBuf) -> Result<
         "echo" => {
             let str_args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
             echo(str_args);
+            Ok(())
+        },
+        "kebda" => {
+            kebda(0, 400);
             Ok(())
         },
         _ => Err("Unknown command".to_string()),
