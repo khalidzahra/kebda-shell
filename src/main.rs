@@ -1,4 +1,4 @@
-use std::{env, fs, io::{stdin, stdout, Write}, os::unix::fs::PermissionsExt, path::PathBuf, process::{exit, Command, Stdio}, time::Duration};
+use std::{env, fs, io::{stdin, stdout, Write}, os::unix::fs::PermissionsExt, path::PathBuf, process::{exit, Command, Stdio}, thread, time::Duration};
 use image::GenericImageView;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use rodio::{Decoder, OutputStream, Sink, Source};
@@ -120,7 +120,7 @@ fn parse_command(command: &str) -> (String, Vec<String>) {
     (cmd, args)
 }
 
-fn kebda(skip: u64, duration: u64) {
+fn kebda(skip: u64, duration: u64, distorted: bool) {
     let kebda_path = "kebda.mp3";
 
     let (_stream, stream_handle) = match OutputStream::try_default() {
@@ -141,9 +141,11 @@ fn kebda(skip: u64, duration: u64) {
 
     let reader = BufReader::new(file);
     let decoder = Decoder::new(reader).unwrap();
-    let source = decoder.skip_duration(Duration::from_secs(skip))
+    let source = decoder.buffered().skip_duration(Duration::from_secs(skip))
                                                                 .take_duration(Duration::from_secs(duration))
-                                                                .amplify(10.0);
+                                                                .amplify(if distorted { 10.0 } else { 1.0 })
+                                                                .speed(if distorted { 1.1 } else { 1.0 })
+                                                                .reverb(Duration::from_millis(if distorted { 60 } else { 0 }), if distorted { 20.0 } else { 0.0 });
     let sink = Sink::try_new(&stream_handle).unwrap();
     sink.append(source);
 
@@ -179,7 +181,7 @@ fn run_builtin(cmd: &str, args: &[String], current_dir: &mut PathBuf) -> Result<
             Ok(())
         },
         "kebda" => {
-            kebda(0, 400);
+            kebda(0, 400, false);
             Ok(())
         },
         _ => Err("Unknown command".to_string()),
@@ -310,10 +312,17 @@ fn display_welcome_message() {
     println!("\n");
 }
 
+fn play_welcome_audio() { 
+    thread::spawn(|| {
+        kebda(60, 16, true);
+    });
+}
+
 fn main() {    
     let mut current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
     
     display_welcome_message();
+    play_welcome_audio();
 
     loop {
         print!("{}", PROMPT);
