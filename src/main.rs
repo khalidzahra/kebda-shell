@@ -84,6 +84,20 @@ fn echo(args: Vec<&str>) {
     println!("\n");
 }
 
+fn cat(path: &str, current_dir: &PathBuf) {
+    let resolved_path = resolve_path(path, current_dir);
+    let path_buf = PathBuf::from(resolved_path);
+
+    if !path_buf.is_file() {
+        println!("{} is not a file", path_buf.display());
+        return;
+    }
+
+    fs::read_to_string(&path_buf).map(|content| {
+        println!("{}", content);
+    }).unwrap();
+}
+
 fn handle_command(command: &str, current_dir: &mut PathBuf) {
     let mut parts = command.split_whitespace();
     let cmd = parts.next().unwrap_or("");
@@ -105,6 +119,10 @@ fn handle_command(command: &str, current_dir: &mut PathBuf) {
         },
         "echo" => {
             echo(args);
+        },
+        "cat" => {
+            let path = args.get(0).unwrap();
+            cat(path, current_dir);
         },
         _ => println!("Unknown command: {}", cmd),
     }
