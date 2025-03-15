@@ -1,4 +1,4 @@
-use std::{env, fs, io::{stdin, stdout, Write}, path::PathBuf, process::exit};
+use std::{env, fs, io::{stdin, stdout, Write}, os::unix::fs::PermissionsExt, path::PathBuf, process::{exit, Command}};
 
 const PROMPT: &str = "kebda $ ";
 
@@ -9,7 +9,6 @@ const COMMAND_LIST: &[&str] = &[
     "cd",
     "pwd",
     "echo",
-    "cat",
 ];
 
 fn help() {
@@ -84,18 +83,22 @@ fn echo(args: Vec<&str>) {
     println!("\n");
 }
 
-fn cat(path: &str, current_dir: &PathBuf) {
-    let resolved_path = resolve_path(path, current_dir);
-    let path_buf = PathBuf::from(resolved_path);
-
-    if !path_buf.is_file() {
-        println!("{} is not a file", path_buf.display());
-        return;
+fn find_executable(cmd: &str) -> Option<PathBuf> {
+    if let Ok(paths) = env::var("PATH") {
+        for path in paths.split(':') {
+            let mut cmd_path = PathBuf::from(path);
+            cmd_path.push(cmd);
+            if cmd_path.exists() {
+                if let Ok(metadata) = fs::metadata(&cmd_path) {
+                    let permissions = metadata.permissions();
+                    if permissions.mode() & 0o111 != 0 {
+                        return Some(cmd_path);
+                    }
+                }
+            }
+        }
     }
-
-    fs::read_to_string(&path_buf).map(|content| {
-        println!("{}", content);
-    }).unwrap();
+    None
 }
 
 fn handle_command(command: &str, current_dir: &mut PathBuf) {
@@ -120,11 +123,28 @@ fn handle_command(command: &str, current_dir: &mut PathBuf) {
         "echo" => {
             echo(args);
         },
-        "cat" => {
-            let path = args.get(0).unwrap();
-            cat(path, current_dir);
+        _ => {
+            // try to find cmd in PATH
+            if let Some(cmd_path) = find_executable(cmd) {
+                match Command::new(cmd_path)
+                    .args(args)
+                    .current_dir(current_dir)
+                    .status() {
+                    Ok(status) => { // handles forks and pipes thank god
+                        if !status.success() {
+                            if let Some(code) = status.code() {
+                                println!("Command '{}' exited with code {}", cmd, code);
+                            } else {
+                                println!("Command '{}' terminated by signal", cmd);
+                            }
+                        }
+                    },
+                    Err(e) => println!("Failed to execute '{}': {}", cmd, e),
+                }
+            } else {
+                println!("Unknown command: {}", cmd);
+            }
         },
-        _ => println!("Unknown command: {}", cmd),
     }
 }
 
